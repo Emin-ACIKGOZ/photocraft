@@ -4,9 +4,9 @@
 // Policy (see book/src/development/dependencies.md):
 //   - weekly batch, Monday morning (UTC)
 //   - a release must be 7 days old before Renovate proposes it (minimumReleaseAge)
-//   - Cargo non-major updates and GitHub Actions updates are grouped into one PR each
-//   - patch and digest updates auto-merge once CI is green; majors need dashboard approval
-//   - security advisories (OSV + GitHub) PR immediately, bypassing schedule and cooldown
+//   - Cargo patch updates and GitHub Actions updates are grouped into one PR each
+//   - patch and digest updates auto-merge once required status checks pass; majors need dashboard approval
+//   - security advisories (GitHub + OSV) PR immediately, bypassing schedule and cooldown
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
@@ -24,6 +24,10 @@
   "minimumReleaseAge": "7 days",
   "internalChecksFilter": "strict",
 
+  // Keep patch updates separate from minor updates, so a patch can still get its own
+  // automergeable PR when a newer minor also exists.
+  "separateMinorPatch": true,
+
   // Security advisories are urgent: skip the schedule and the cooldown.
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
@@ -33,22 +37,29 @@
   },
 
   // Cargo: move the Cargo.toml requirement when an update warrants it, and keep Cargo.lock
-  // fresh even when no manifest change is due.
+  // fresh even when no manifest change is due. Lockfile maintenance resolves through Cargo
+  // itself, so the release-age cooldown cannot be applied to it (see the book).
   "rangeStrategy": "bump",
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": ["before 6am on monday"],
   },
 
-  // Every PR carries one label. (assigned once the account has triage permission)
+  // Every PR carries one label.
   "labels": ["dependencies"],
 
   "packageRules": [
     {
-      "description": "Group non-major Cargo updates into a single PR",
+      "description": "Group Cargo patch updates into a single PR",
       "matchManagers": ["cargo"],
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
-      "groupName": "cargo non-major",
+      "matchUpdateTypes": ["patch", "pin", "digest"],
+      "groupName": "cargo patch",
+    },
+    {
+      "description": "Group Cargo minor updates into a single PR",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["minor"],
+      "groupName": "cargo minor",
     },
     {
       "description": "Group GitHub Actions updates into a single PR",
@@ -61,11 +72,16 @@
       "dependencyDashboardApproval": true,
     },
     {
-      "description": "Auto-merge patches and digest updates once CI is green",
+      "description": "Auto-merge patches and digest updates once required status checks pass",
       "matchUpdateTypes": ["patch", "digest"],
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": true,
+    },
+    {
+      "description": "git-refs have no release timestamp, so the 7-day cooldown cannot apply to the pinned craft-libs revisions",
+      "matchDatasources": ["git-refs"],
+      "minimumReleaseAge": null,
     },
   ],
 }
